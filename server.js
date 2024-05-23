@@ -1,6 +1,8 @@
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
+import mysql from 'mysql2/promise';
+import bodyParser from 'body-parser';
 
 const PORT = process.env.PORT || 3000;
 
@@ -8,7 +10,74 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-let gameRooms = {};io.on('connection', (socket) => {
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Configura la connessione al database
+const dbConfig = {
+    host: 'localhost',
+    user: 'root',
+    password: '1234', // Assicurati che questa sia la tua password corretta
+    database: 'CHESS'
+};
+
+let dbConnection;
+
+// Funzione per connettersi al database
+async function connectToDatabase() {
+    console.log('Attempting to connect to the database...');
+    try {
+        dbConnection = await mysql.createConnection(dbConfig);
+        console.log('Connected to the database');
+    } catch (err) {
+        console.error('Database connection error:', err);
+        throw err;
+    }
+}
+
+// Middleware per verificare la connessione al database
+app.use((req, res, next) => {
+    if (!dbConnection) {
+        return res.status(500).send('Database connection not established');
+    }
+    next();
+});
+
+// Route per il login
+app.post('/login', async (req, res) => {
+    console.log('Login route called');
+    console.log('Request body:', req.body);
+    const { email, password } = req.body; 
+    console.log(`Received email: ${email}, password: ${password}`);
+    if (!email || !password) {
+        return res.status(400).send('Email and password are required');
+    }
+
+    try {
+        console.log('Connecting to the database for login');
+        const query = 'SELECT * FROM users WHERE email = ? AND password = ?';
+        console.log(`Executing query: ${query}`);
+        const [rows] = await dbConnection.execute(query, [email, password]);
+
+        console.log(`Database query completed. Rows returned: ${rows.length}`);
+        if (rows.length > 0) {
+            console.log('Login successful');
+            res.send({ message: 'Login successful', user: rows[0] });
+        } else {
+            console.log('Invalid email or password');
+            res.status(401).send('Invalid email or password');
+        }
+    } catch (error) {
+        console.error('Error during login:', error);
+        res.status(500).send('Internal server error');
+    }
+});
+
+
+
+
+let gameRooms = {};
+io.on('connection', (socket) => {
     console.log('A user connected');
 
     // Join a game room
@@ -77,7 +146,13 @@ let gameRooms = {};io.on('connection', (socket) => {
     });
 });
 
-
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Connessione al database e avvio del server
+connectToDatabase()
+    .then(() => {
+        server.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('Failed to connect to the database. Server not started.', err);
+    });
