@@ -73,6 +73,34 @@ app.post('/login', async (req, res) => {
     }
 });
 
+// Route per la registrazione
+app.post('/register', async (req, res) => {
+    console.log('Registration route called');
+    console.log('Request body:', req.body);  // Log del corpo della richiesta
+
+    const { email, password, username } = req.body;
+    if (!email || !password || !username) {
+        return res.status(400).send('Email, password, and username are required');
+    }
+
+    try {
+        console.log('Connecting to the database for registration');
+        const [result] = await dbConnection.execute(
+            'INSERT INTO users (email, password, username) VALUES (?, ?, ?)',
+            [email, password, username]
+        );
+
+        if (result.affectedRows > 0) {
+            res.send({ success: true, message: 'Registration successful' });
+        } else {
+            res.status(500).send('Registration failed');
+        }
+    } catch (error) {
+        console.error('Error during registration:', error);
+        res.status(500).send('Internal server error');
+    }
+});
+
 
 
 
