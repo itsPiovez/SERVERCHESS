@@ -3,10 +3,12 @@ import http from 'http';
 import { Server } from 'socket.io';
 import mysql from 'mysql2/promise';
 import bodyParser from 'body-parser';
+import { Chess } from 'chess.js';
 
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -15,10 +17,10 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Configura la connessione al database
 const dbConfig = {
-    host: 'localhost',
-    user: 'root',
-    password: '1234', // Assicurati che questa sia la tua password corretta
-    database: 'CHESS'
+    host: '151.69.121.220',
+    user: 'marco_piovesan',
+    password: '25040root', // Assicurati che questa sia la tua password corretta
+    database: 'chess'
 };
 
 let dbConnection;
@@ -47,7 +49,7 @@ app.use((req, res, next) => {
 app.post('/login', async (req, res) => {
     console.log('Login route called');
     console.log('Request body:', req.body);
-    const { email, password } = req.body; 
+    const { email, password } = req.body;
     console.log(`Received email: ${email}, password: ${password}`);
     if (!email || !password) {
         return res.status(400).send('Email and password are required');
@@ -112,7 +114,7 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (roomData) => {
         const roomId = roomData.roomId;
         const room = gameRooms[roomId];
-        
+
         if (!room) {
             // If the room doesn't exist, create it
             gameRooms[roomId] = { player1: socket.id, player2: null };
@@ -128,6 +130,9 @@ io.on('connection', (socket) => {
             socket.join(roomId);
             console.log('User joined room:', roomId);
             io.to(roomId).emit('roomJoined', { roomId: roomId, players: [room.player1, socket.id] });
+
+            // Start the game now that both players have joined
+            io.to(roomId).emit('gameStart');
         }
     });
 
@@ -150,28 +155,32 @@ io.on('connection', (socket) => {
 
     // Handle disconnect event
     socket.on('disconnect', () => {
-        console.log('A user disconnected');
-    
+        console.log('A user disconnected: ' + socket.id);
+
         // Check if the disconnected player was in a game room
         for (const roomId in gameRooms) {
             if (gameRooms.hasOwnProperty(roomId)) {
                 const room = gameRooms[roomId];
-                if (room.player1 === socket.id) {
-                    // Player 1 disconnected, so player 2 wins
-                    if (room.player2) {
-                        io.to(roomId).emit('gameOver', { winner: room.player2 });
+                if (room.player1 === socket.id || room.player2 === socket.id) {
+                    console.log('Player was in room: ' + roomId);
+
+                    // Determine the other player
+                    const otherPlayerId = room.player1 === socket.id ? room.player2 : room.player1;
+
+                    // If the other player exists, they win and are informed that the player left
+                    if (otherPlayerId) {
+                        console.log('Informing other player of disconnect');
+                        io.to(roomId).emit('gameOver', { winner: otherPlayerId });
+                        io.to(roomId).emit('playerLeft', { playerId: socket.id });
                     }
+
+                    // Remove the room
                     delete gameRooms[roomId];
-                } else if (room.player2 === socket.id) {
-                    // Player 2 disconnected, so player 1 wins
-                    if (room.player1) {
-                        io.to(roomId).emit('gameOver', { winner: room.player1 });
-                    }
-                    delete gameRooms[roomId];
+                    console.log('Room deleted: ' + roomId);
                 }
             }
         }
-    });
+    })
 });
 
 // Connessione al database e avvio del server
@@ -184,3 +193,19 @@ connectToDatabase()
     .catch((err) => {
         console.error('Failed to connect to the database. Server not started.', err);
     });
+
+
+
+app.post('/possibleMoves', (req, res) => {
+    const { fen } = req.body;
+    console.log('FEN:', fen);
+
+    const game = new Chess(fen);
+    const moves = game.moves({ verbose: true });
+    const formattedMoves = moves.map(move => move.from + move.to);
+
+    const scacco = game.isCheck();
+    const scaccomatto = game.isCheckmate();
+    
+    res.json({ legalMoves: formattedMoves, scacco, scaccomatto });
+});
