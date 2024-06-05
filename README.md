@@ -1,4 +1,4 @@
-Funzionamento Server:
+# Funzionamento Server:
 attraverso il comando "node server.js" nel terminale si riesce ad attivare la porta 3000 dove arrivano i messaggi del websocket
 bisogna arrivare alla cartella giusta (\.\ServerChess) e per farlo basta utilizzare questo comando "cd /" 
 che ti permette di tornare alla cartella principale C:\>, poi basta continuare a scrivere "cd /cartella che contiene server.js"
